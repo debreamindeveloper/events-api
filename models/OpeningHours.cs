@@ -13,7 +13,7 @@ public class OpeningHours : ITableEntity
     /// Day of the week (0-6, where 0 is Sunday)
     /// </summary>
     [JsonPropertyName("dayOfWeek")]
-    public int DayOfWeek { get; set; }
+    public string DayOfWeek { get; set; }
 
     /// <summary>
     /// Name of the day (e.g., "Monday", "Tuesday")
@@ -73,7 +73,7 @@ public class OpeningHours : ITableEntity
     /// <summary>
     /// Constructor with parameters
     /// </summary>
-    public OpeningHours(int dayOfWeek, string dayName, string openTime, string closeTime, bool isClosed = false)
+    public OpeningHours(string dayOfWeek, string dayName, string openTime, string closeTime, bool isClosed = false)
     {
         DayOfWeek = dayOfWeek;
         DayName = dayName;
@@ -91,7 +91,7 @@ public class OpeningHours : ITableEntity
     {
         return new OpeningHours
         {
-            DayOfWeek = entity.GetInt32("DayOfWeek") ?? entity.GetInt32("day_of_week") ?? 0,
+            DayOfWeek = entity.GetString("DayOfWeek") ?? entity.GetString("day_of_week") ?? string.Empty,
             DayName = entity.GetString("DayName") ?? entity.GetString("day_name") ?? string.Empty,
             OpenTime = entity.GetString("OpenTime") ?? entity.GetString("open_time") ?? string.Empty,
             CloseTime = entity.GetString("CloseTime") ?? entity.GetString("close_time") ?? string.Empty,

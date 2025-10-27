@@ -111,7 +111,7 @@ public class EventsFunctions
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
+                WriteIndented = true 
             };
 
             await response.WriteStringAsync(JsonSerializer.Serialize(events, jsonOptions));
@@ -218,7 +218,7 @@ public class EventsFunctions
             var tableClient = serviceClient.GetTableClient("openinghours");
 
             // Query all entities
-            var entities = tableClient.QueryAsync<TableEntity>(filter: $"PartitionKey eq 'openinghours'");
+            var entities = tableClient.QueryAsync<TableEntity>(filter: $"PartitionKey eq 'opening_hours'");
 
             // Convert entities to OpeningHours objects
             var openingHours = new List<OpeningHours>();
