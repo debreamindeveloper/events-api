@@ -169,7 +169,9 @@ The API will be available at `http://localhost:7071/api/events`
 
 ## API Endpoints
 
-### Get All Events
+### Events Endpoints
+
+#### Get All Events
 
 ```http
 GET /api/events
@@ -198,7 +200,7 @@ curl http://localhost:7071/api/events?upcoming=true&limit=10
 ]
 ```
 
-### Get Event by ID
+#### Get Event by ID
 
 ```http
 GET /api/events/{rowKey}
@@ -216,8 +218,72 @@ curl http://localhost:7071/api/events/20250201120000_Sunday_Service
   "description": "Weekly Sunday worship service",
   "location": "Main Sanctuary",
   "eventDate": "2025-02-01T12:00:00",
-  "partitionKey": "EVENT",
+  "partitionKey": "events",
   "rowKey": "20250201120000_Sunday_Service"
+}
+```
+
+### Opening Hours Endpoints
+
+#### Get All Opening Hours
+
+```http
+GET /api/openinghours
+```
+
+**Example:**
+```bash
+curl http://localhost:7071/api/openinghours
+```
+
+**Response:**
+```json
+[
+  {
+    "dayOfWeek": 0,
+    "dayName": "Sunday",
+    "openTime": "10:00",
+    "closeTime": "18:00",
+    "isClosed": false,
+    "partitionKey": "openinghours",
+    "rowKey": "0"
+  },
+  {
+    "dayOfWeek": 1,
+    "dayName": "Monday",
+    "openTime": "09:00",
+    "closeTime": "17:00",
+    "isClosed": false,
+    "partitionKey": "openinghours",
+    "rowKey": "1"
+  }
+]
+```
+
+#### Get Opening Hours by Day
+
+```http
+GET /api/openinghours/{dayOfWeek}
+```
+
+**Path Parameters:**
+- `dayOfWeek` - Day of week (0-6, where 0 is Sunday)
+
+**Example:**
+```bash
+curl http://localhost:7071/api/openinghours/0
+```
+
+**Response:**
+```json
+{
+  "dayOfWeek": 0,
+  "dayName": "Sunday",
+  "openTime": "10:00",
+  "closeTime": "18:00",
+  "isClosed": false,
+  "partitionKey": "openinghours",
+  "rowKey": "0"
 }
 ```
 
@@ -257,13 +323,14 @@ func azure functionapp publish events-api-function
 ```
 Events-API/
 ├── Functions/
-│   └── EventsFunctions.cs   # Azure Functions HTTP endpoints
+│   └── EventsFunctions.cs       # Azure Functions HTTP endpoints
 ├── Models/
-│   └── Event.cs             # Event model class
-├── Program.cs               # Application entry point
-├── EventsAPI.csproj         # Project file with dependencies
-├── host.json                # Azure Functions host configuration
-├── local.settings.json      # Local development settings
+│   ├── Event.cs                 # Event model class
+│   └── OpeningHours.cs          # OpeningHours model class
+├── Program.cs                   # Application entry point
+├── EventsAPI.csproj             # Project file with dependencies
+├── host.json                    # Azure Functions host configuration
+├── local.settings.json          # Local development settings
 ├── .gitignore
 └── README.md
 ```
