@@ -101,7 +101,7 @@ public class Event : ITableEntity
             Title = entity.GetString("Title") ?? entity.GetString("title") ?? string.Empty,
             Description = entity.GetString("Description") ?? entity.GetString("description") ?? string.Empty,
             Location = entity.GetString("Location") ?? entity.GetString("location") ?? string.Empty,
-            EventDate = entity.GetDateTime("EventDate") ?? entity.GetDateTime("eventDate") ?? DateTime.MinValue,
+            EventDate = entity.GetDateTime("EventDate") ?? entity.GetDateTime("event_date") ?? DateTime.MinValue,
             PartitionKey = entity.PartitionKey,
             RowKey = entity.RowKey,
             ETag = entity.ETag,
