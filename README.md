@@ -1,6 +1,6 @@
-# Events API - Azure Functions
+# Events API - Azure Functions (C#)
 
-An Azure Functions-based REST API for managing church events, with data stored in Azure Table Storage.
+An Azure Functions-based REST API for managing church events, with data stored in Azure Table Storage. Built with C# and .NET 8.
 
 ## Features
 
@@ -22,10 +22,11 @@ Each event contains the following fields:
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- .NET 8 SDK or higher
 - Azure Functions Core Tools (v4)
 - Azure Storage Account
 - Azure Storage Explorer (optional, for managing table data)
+- Visual Studio 2022, VS Code, or Rider (optional, for development)
 
 ## Setup Instructions
 
@@ -46,10 +47,10 @@ brew install azure-functions-core-tools@4
 # See: https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local
 ```
 
-### 2. Install Python Dependencies
+### 2. Restore NuGet Packages
 
 ```bash
-pip install -r requirements.txt
+dotnet restore
 ```
 
 ### 3. Configure Azure Storage
@@ -83,7 +84,7 @@ Update `local.settings.json` with your configuration:
   "IsEncrypted": false,
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "AZURE_STORAGE_CONNECTION_STRING": "YOUR_CONNECTION_STRING_HERE",
     "TABLE_NAME": "events"
   }
@@ -99,48 +100,72 @@ Update `local.settings.json` with your configuration:
 
 You can create the table using Azure Storage Explorer or programmatically:
 
-**Using Python:**
-```python
-from azure.data.tables import TableServiceClient
+**Using C#:**
+```csharp
+using Azure.Data.Tables;
 
-connection_string = "YOUR_CONNECTION_STRING"
-service_client = TableServiceClient.from_connection_string(connection_string)
-table_client = service_client.create_table_if_not_exists("events")
+var connectionString = "YOUR_CONNECTION_STRING";
+var serviceClient = new TableServiceClient(connectionString);
+await serviceClient.CreateTableIfNotExistsAsync("events");
+```
+
+**Using Azure CLI:**
+```bash
+az storage table create --name events --connection-string "YOUR_CONNECTION_STRING"
 ```
 
 ### 6. Add Sample Data (Optional)
 
 You can add sample events to test the API:
 
-```python
-from azure.data.tables import TableServiceClient
-from datetime import datetime, timedelta
+**Using C#:**
+```csharp
+using Azure.Data.Tables;
 
-connection_string = "YOUR_CONNECTION_STRING"
-service_client = TableServiceClient.from_connection_string(connection_string)
-table_client = service_client.get_table_client("events")
+var connectionString = "YOUR_CONNECTION_STRING";
+var serviceClient = new TableServiceClient(connectionString);
+var tableClient = serviceClient.GetTableClient("events");
 
-# Sample event
-event = {
-    'PartitionKey': 'EVENT',
-    'RowKey': '20250201120000_Sunday_Service',
-    'title': 'Sunday Service',
-    'description': 'Weekly Sunday worship service',
-    'location': 'Main Sanctuary',
-    'eventDate': (datetime.now() + timedelta(days=7)).isoformat()
-}
+// Sample event
+var entity = new TableEntity("EVENT", "20250201120000_Sunday_Service")
+{
+    { "Title", "Sunday Service" },
+    { "Description", "Weekly Sunday worship service" },
+    { "Location", "Main Sanctuary" },
+    { "EventDate", DateTime.Now.AddDays(7) }
+};
 
-table_client.create_entity(event)
+await tableClient.AddEntityAsync(entity);
 ```
+
+**Using Azure Storage Explorer:**
+1. Open Azure Storage Explorer
+2. Navigate to your storage account → Tables → events
+3. Click "Add" to create a new entity
+4. Set PartitionKey to "EVENT" and RowKey to a unique identifier
+5. Add properties: Title, Description, Location, EventDate
 
 ## Running Locally
 
-1. Start the Azure Functions runtime:
-   ```bash
-   func start
-   ```
+### Option 1: Using Azure Functions Core Tools
 
-2. The API will be available at `http://localhost:7071/api/events`
+```bash
+func start
+```
+
+### Option 2: Using .NET CLI
+
+```bash
+dotnet build
+dotnet run
+```
+
+### Option 3: Using Visual Studio
+
+1. Open the project in Visual Studio 2022
+2. Press F5 to start debugging
+
+The API will be available at `http://localhost:7071/api/events`
 
 ## API Endpoints
 
@@ -208,7 +233,7 @@ az group create --name EventsAPIResourceGroup --location eastus
 az storage account create --name eventsstorageacct --resource-group EventsAPIResourceGroup --location eastus --sku Standard_LRS
 
 # Create function app
-az functionapp create --resource-group EventsAPIResourceGroup --consumption-plan-location eastus --runtime python --runtime-version 3.9 --functions-version 4 --name events-api-function --storage-account eventsstorageacct
+az functionapp create --resource-group EventsAPIResourceGroup --consumption-plan-location eastus --runtime dotnet-isolated --runtime-version 8 --functions-version 4 --name events-api-function --storage-account eventsstorageacct
 ```
 
 ### 2. Configure Application Settings
@@ -231,13 +256,14 @@ func azure functionapp publish events-api-function
 
 ```
 Events-API/
-├── function_app.py          # Main Azure Functions app with HTTP endpoints
-├── models/
-│   ├── __init__.py
-│   └── event.py            # Event model class
-├── host.json               # Azure Functions host configuration
-├── local.settings.json     # Local development settings
-├── requirements.txt        # Python dependencies
+├── Functions/
+│   └── EventsFunctions.cs   # Azure Functions HTTP endpoints
+├── Models/
+│   └── Event.cs             # Event model class
+├── Program.cs               # Application entry point
+├── EventsAPI.csproj         # Project file with dependencies
+├── host.json                # Azure Functions host configuration
+├── local.settings.json      # Local development settings
 ├── .gitignore
 └── README.md
 ```
