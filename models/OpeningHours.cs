@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace EventsAPI.Models;
 
 /// <summary>
-/// OpeningHours model representing church opening hours for a specific day.
+/// OpeningHours model representing church opening hours for a specific day with multilingual support.
 /// </summary>
 public class OpeningHours : ITableEntity
 {
@@ -13,13 +13,13 @@ public class OpeningHours : ITableEntity
     /// Day of the week (0-6, where 0 is Sunday)
     /// </summary>
     [JsonPropertyName("dayOfWeek")]
-    public string DayOfWeek { get; set; }
+    public int DayOfWeek { get; set; }
 
     /// <summary>
-    /// Name of the day (e.g., "Monday", "Tuesday")
+    /// Name of the day in multiple languages (e.g., "Monday", "Maanantai", "ሰኞ")
     /// </summary>
     [JsonPropertyName("dayName")]
-    public string DayName { get; set; } = string.Empty;
+    public MultilingualContent DayName { get; set; } = new();
 
     /// <summary>
     /// Opening time in HH:mm format (e.g., "09:00")
@@ -71,9 +71,23 @@ public class OpeningHours : ITableEntity
     }
 
     /// <summary>
-    /// Constructor with parameters
+    /// Constructor with parameters (English day name only)
     /// </summary>
-    public OpeningHours(string dayOfWeek, string dayName, string openTime, string closeTime, bool isClosed = false)
+    public OpeningHours(int dayOfWeek, string dayName, string openTime, string closeTime, bool isClosed = false)
+    {
+        DayOfWeek = dayOfWeek;
+        DayName = new MultilingualContent(dayName);
+        OpenTime = openTime;
+        CloseTime = closeTime;
+        IsClosed = isClosed;
+        PartitionKey = "openinghours";
+        RowKey = dayOfWeek.ToString();
+    }
+
+    /// <summary>
+    /// Constructor with multilingual day name
+    /// </summary>
+    public OpeningHours(int dayOfWeek, MultilingualContent dayName, string openTime, string closeTime, bool isClosed = false)
     {
         DayOfWeek = dayOfWeek;
         DayName = dayName;
@@ -89,10 +103,16 @@ public class OpeningHours : ITableEntity
     /// </summary>
     public static OpeningHours FromTableEntity(TableEntity entity)
     {
+        // Parse day of week
+        var dayOfWeek = entity.GetInt32("DayOfWeek") ?? entity.GetInt32("day_of_week") ?? 0;
+
+        // Parse multilingual day name
+        var dayName = ParseMultilingualDayName(entity);
+
         return new OpeningHours
         {
-            DayOfWeek = entity.GetString("DayOfWeek") ?? entity.GetString("day_of_week") ?? string.Empty,
-            DayName = entity.GetString("DayName") ?? entity.GetString("day_name") ?? string.Empty,
+            DayOfWeek = dayOfWeek,
+            DayName = dayName,
             OpenTime = entity.GetString("OpenTime") ?? entity.GetString("open_time") ?? string.Empty,
             CloseTime = entity.GetString("CloseTime") ?? entity.GetString("close_time") ?? string.Empty,
             IsClosed = entity.GetBoolean("IsClosed") ?? entity.GetBoolean("is_closed") ?? false,
@@ -104,6 +124,25 @@ public class OpeningHours : ITableEntity
     }
 
     /// <summary>
+    /// Parse multilingual day name from TableEntity
+    /// </summary>
+    private static MultilingualContent ParseMultilingualDayName(TableEntity entity)
+    {
+        // Try to get multilingual properties (en, fi, am suffixes)
+        var english = entity.GetString("DayName_en") ?? entity.GetString("day_name_en") ?? string.Empty;
+        var finnish = entity.GetString("DayName_fi") ?? entity.GetString("day_name_fi") ?? string.Empty;
+        var amharic = entity.GetString("DayName_am") ?? entity.GetString("day_name_am") ?? string.Empty;
+
+        // If no multilingual properties found, try to get the base property (for backward compatibility)
+        if (string.IsNullOrEmpty(english))
+        {
+            english = entity.GetString("DayName") ?? entity.GetString("day_name") ?? string.Empty;
+        }
+
+        return new MultilingualContent(english, finnish, amharic);
+    }
+
+    /// <summary>
     /// Convert to TableEntity for storage
     /// </summary>
     public TableEntity ToTableEntity()
@@ -111,7 +150,9 @@ public class OpeningHours : ITableEntity
         var entity = new TableEntity(PartitionKey, RowKey)
         {
             { "DayOfWeek", DayOfWeek },
-            { "DayName", DayName },
+            { "DayName_en", DayName.English },
+            { "DayName_fi", DayName.Finnish },
+            { "DayName_am", DayName.Amharic },
             { "OpenTime", OpenTime },
             { "CloseTime", CloseTime },
             { "IsClosed", IsClosed }

@@ -150,7 +150,7 @@ public class Event : ITableEntity
     /// Convert to TableEntity for storage
     /// </summary>
     public TableEntity ToTableEntity()
-    {
+    { 
         var entity = new TableEntity(PartitionKey, RowKey)
         {
             { "Title_en", Title.English },

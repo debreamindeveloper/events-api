@@ -275,7 +275,11 @@ curl http://localhost:7071/api/openinghours
 [
   {
     "dayOfWeek": 0,
-    "dayName": "Sunday",
+    "dayName": {
+      "en": "Sunday",
+      "fi": "Sunnuntai",
+      "am": "ሰንበት"
+    },
     "openTime": "10:00",
     "closeTime": "18:00",
     "isClosed": false,
@@ -284,7 +288,11 @@ curl http://localhost:7071/api/openinghours
   },
   {
     "dayOfWeek": 1,
-    "dayName": "Monday",
+    "dayName": {
+      "en": "Monday",
+      "fi": "Maanantai",
+      "am": "ሰኞ"
+    },
     "openTime": "09:00",
     "closeTime": "17:00",
     "isClosed": false,
@@ -312,7 +320,11 @@ curl http://localhost:7071/api/openinghours/0
 ```json
 {
   "dayOfWeek": 0,
-  "dayName": "Sunday",
+  "dayName": {
+    "en": "Sunday",
+    "fi": "Sunnuntai",
+    "am": "ሰንበት"
+  },
   "openTime": "10:00",
   "closeTime": "18:00",
   "isClosed": false,
@@ -358,6 +370,44 @@ EventDate: 2025-02-01T12:00:00
 
 **Backward Compatibility:**
 If you have existing events with simple string fields (Title, Description, Location), the API will automatically convert them to multilingual format with the English content as the primary language.
+
+## Creating Opening Hours with Multilingual Support
+
+The `openinghours` table should have the following columns for multilingual day names:
+
+**For Day Name:**
+- `DayOfWeek` - Day of week (0-6, where 0 is Sunday)
+- `DayName_en` - English day name
+- `DayName_fi` - Finnish day name
+- `DayName_am` - Amharic day name
+- `OpenTime` - Opening time in HH:mm format
+- `CloseTime` - Closing time in HH:mm format
+- `IsClosed` - Boolean indicating if closed on this day
+
+**Example Table Row:**
+```
+PartitionKey: openinghours
+RowKey: 0
+DayOfWeek: 0
+DayName_en: Sunday
+DayName_fi: Sunnuntai
+DayName_am: ሰንበት
+OpenTime: 10:00
+CloseTime: 18:00
+IsClosed: false
+```
+
+**Day of Week Reference:**
+- 0 = Sunday
+- 1 = Monday
+- 2 = Tuesday
+- 3 = Wednesday
+- 4 = Thursday
+- 5 = Friday
+- 6 = Saturday
+
+**Backward Compatibility:**
+If you have existing opening hours with simple string fields (DayName), the API will automatically convert them to multilingual format with the English content as the primary language.
 
 ## Deployment to Azure
 
