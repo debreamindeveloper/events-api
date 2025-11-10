@@ -4,20 +4,24 @@ An Azure Functions-based REST API for managing church events, with data stored i
 
 ## Features
 
+- **Multilingual Support**: Title, description, and location in English, Finnish, and Amharic
 - **GET /api/events** - Retrieve all events
 - **GET /api/events/{id}** - Retrieve a specific event by ID
+- **GET /api/openinghours** - Retrieve all opening hours
+- **GET /api/openinghours/{dayOfWeek}** - Retrieve opening hours for a specific day
 - Query parameters for filtering and limiting results
-- Simple event model with title, description, location, and event date
+- Event model with multilingual title, description, location, and event date
+- Opening hours model with day of week, day name, open/close times
 
 ## Event Model
 
-Each event contains the following fields:
+Each event contains the following fields with multilingual support:
 
-- `title` - The title of the event
-- `description` - A description of the event
-- `location` - The location where the event takes place
+- `title` - The title of the event (English, Finnish, Amharic)
+- `description` - A description of the event (English, Finnish, Amharic)
+- `location` - The location where the event takes place (English, Finnish, Amharic)
 - `eventDate` - The date and time of the event (ISO 8601 format)
-- `partitionKey` - Azure Table Storage partition key (default: "EVENT")
+- `partitionKey` - Azure Table Storage partition key (default: "events")
 - `rowKey` - Azure Table Storage row key (unique identifier)
 
 ## Prerequisites
@@ -190,15 +194,33 @@ curl http://localhost:7071/api/events?upcoming=true&limit=10
 ```json
 [
   {
-    "title": "Sunday Service",
-    "description": "Weekly Sunday worship service",
-    "location": "Main Sanctuary",
+    "title": {
+      "en": "Sunday Service",
+      "fi": "Sunnuntain jumalanpalvelus",
+      "am": "ሰንበት ሰዓት"
+    },
+    "description": {
+      "en": "Weekly Sunday worship service",
+      "fi": "Viikoittainen sunnuntain jumalanpalvelus",
+      "am": "ሳምንታዊ ሰንበት ሰዓት"
+    },
+    "location": {
+      "en": "Main Sanctuary",
+      "fi": "Pääsankttuaario",
+      "am": "ዋና ቅዱስ ቦታ"
+    },
     "eventDate": "2025-02-01T12:00:00",
-    "partitionKey": "EVENT",
+    "partitionKey": "events",
     "rowKey": "20250201120000_Sunday_Service"
   }
 ]
 ```
+
+**Multilingual Format:**
+Each text field (title, description, location) contains translations in three languages:
+- `en` - English
+- `fi` - Finnish
+- `am` - Amharic
 
 #### Get Event by ID
 
@@ -214,9 +236,21 @@ curl http://localhost:7071/api/events/20250201120000_Sunday_Service
 **Response:**
 ```json
 {
-  "title": "Sunday Service",
-  "description": "Weekly Sunday worship service",
-  "location": "Main Sanctuary",
+  "title": {
+    "en": "Sunday Service",
+    "fi": "Sunnuntain jumalanpalvelus",
+    "am": "ሰንበት ሰዓት"
+  },
+  "description": {
+    "en": "Weekly Sunday worship service",
+    "fi": "Viikoittainen sunnuntain jumalanpalvelus",
+    "am": "ሳምንታዊ ሰንበት ሰዓት"
+  },
+  "location": {
+    "en": "Main Sanctuary",
+    "fi": "Pääsankttuaario",
+    "am": "ዋና ቅዱስ ቦታ"
+  },
   "eventDate": "2025-02-01T12:00:00",
   "partitionKey": "events",
   "rowKey": "20250201120000_Sunday_Service"
@@ -286,6 +320,44 @@ curl http://localhost:7071/api/openinghours/0
   "rowKey": "0"
 }
 ```
+
+## Creating Events with Multilingual Content
+
+When adding events to the Azure Table Storage, you can provide content in multiple languages. The table should have the following columns for each language:
+
+**For Title:**
+- `Title_en` - English title
+- `Title_fi` - Finnish title
+- `Title_am` - Amharic title
+
+**For Description:**
+- `Description_en` - English description
+- `Description_fi` - Finnish description
+- `Description_am` - Amharic description
+
+**For Location:**
+- `Location_en` - English location
+- `Location_fi` - Finnish location
+- `Location_am` - Amharic location
+
+**Example Table Row:**
+```
+PartitionKey: events
+RowKey: 20250201120000_Sunday_Service
+Title_en: Sunday Service
+Title_fi: Sunnuntain jumalanpalvelus
+Title_am: ሰንበት ሰዓት
+Description_en: Weekly Sunday worship service
+Description_fi: Viikoittainen sunnuntain jumalanpalvelus
+Description_am: ሳምንታዊ ሰንበት ሰዓት
+Location_en: Main Sanctuary
+Location_fi: Pääsankttuaario
+Location_am: ዋና ቅዱስ ቦታ
+EventDate: 2025-02-01T12:00:00
+```
+
+**Backward Compatibility:**
+If you have existing events with simple string fields (Title, Description, Location), the API will automatically convert them to multilingual format with the English content as the primary language.
 
 ## Deployment to Azure
 
