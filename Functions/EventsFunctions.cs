@@ -37,6 +37,33 @@ public class EventsFunctions
     }
 
     /// <summary>
+    /// Get table client for the opening hours table
+    /// </summary>
+    private TableClient GetOpeningHoursTableClient()
+    {
+        var serviceClient = new TableServiceClient(_connectionString);
+        return serviceClient.GetTableClient("openinghours");
+    }
+
+    /// <summary>
+    /// Serialize a payload to JSON and return it as an HTTP response with the given status code
+    /// </summary>
+    private static async Task<HttpResponseData> WriteJson(HttpRequestData req, HttpStatusCode statusCode, object payload)
+    {
+        var response = req.CreateResponse(statusCode);
+        response.Headers.Add("Content-Type", "application/json");
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        };
+
+        await response.WriteStringAsync(JsonSerializer.Serialize(payload, jsonOptions));
+        return response;
+    }
+
+    /// <summary>
     /// HTTP GET endpoint to retrieve all events from Azure Table Storage
     /// </summary>
     /// <param name="req">HTTP request</param>
@@ -201,6 +228,194 @@ public class EventsFunctions
     }
 
     /// <summary>
+    /// HTTP POST endpoint to create a new event
+    /// </summary>
+    /// <param name="req">HTTP request with Event JSON body</param>
+    /// <returns>JSON object representing the created event</returns>
+    [Function("CreateEvent")]
+    public async Task<HttpResponseData> CreateEvent(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "events")] HttpRequestData req)
+    {
+        _logger.LogInformation("Processing POST request to create event");
+
+        try
+        {
+            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Request body is required" });
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true
+            };
+
+            Event? evt;
+            try
+            {
+                evt = JsonSerializer.Deserialize<Event>(body, jsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = $"Invalid JSON: {ex.Message}" });
+            }
+
+            if (evt == null || evt.Title == null || string.IsNullOrWhiteSpace(evt.Title.English))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Event title (en) is required" });
+            }
+
+            if (evt.EventDate == DateTime.MinValue)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Event date is required" });
+            }
+
+            evt.PartitionKey = "events";
+            if (string.IsNullOrWhiteSpace(evt.RowKey))
+            {
+                var dateStr = evt.EventDate.ToString("yyyyMMddHHmmss");
+                var titleSlug = evt.Title.English.Replace(" ", "_");
+                if (titleSlug.Length > 20) titleSlug = titleSlug.Substring(0, 20);
+                evt.RowKey = $"{dateStr}_{titleSlug}";
+            }
+
+            var tableClient = GetTableClient();
+            await tableClient.CreateIfNotExistsAsync();
+
+            try
+            {
+                await tableClient.AddEntityAsync(evt.ToTableEntity());
+            }
+            catch (RequestFailedException ex) when (ex.Status == 409)
+            {
+                return await WriteJson(req, HttpStatusCode.Conflict,
+                    new { error = $"Event with ID '{evt.RowKey}' already exists" });
+            }
+
+            return await WriteJson(req, HttpStatusCode.Created, evt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error creating event: {ex.Message}");
+            return await WriteJson(req, HttpStatusCode.InternalServerError, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// HTTP PUT endpoint to update an existing event
+    /// </summary>
+    /// <param name="req">HTTP request with Event JSON body</param>
+    /// <param name="id">Event row key</param>
+    /// <returns>JSON object representing the updated event</returns>
+    [Function("UpdateEvent")]
+    public async Task<HttpResponseData> UpdateEvent(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "events/{id}")] HttpRequestData req,
+        string id)
+    {
+        _logger.LogInformation($"Processing PUT request for event with ID: {id}");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Event ID is required" });
+            }
+
+            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Request body is required" });
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true
+            };
+
+            Event? evt;
+            try
+            {
+                evt = JsonSerializer.Deserialize<Event>(body, jsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = $"Invalid JSON: {ex.Message}" });
+            }
+
+            if (evt == null)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Invalid event payload" });
+            }
+
+            evt.PartitionKey = "events";
+            evt.RowKey = id;
+
+            var tableClient = GetTableClient();
+
+            try
+            {
+                await tableClient.GetEntityAsync<TableEntity>("events", id);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return await WriteJson(req, HttpStatusCode.NotFound, new { error = $"Event with ID '{id}' not found" });
+            }
+
+            await tableClient.UpdateEntityAsync(evt.ToTableEntity(), ETag.All, TableUpdateMode.Replace);
+
+            return await WriteJson(req, HttpStatusCode.OK, evt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error updating event: {ex.Message}");
+            return await WriteJson(req, HttpStatusCode.InternalServerError, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// HTTP DELETE endpoint to delete an event by its row key
+    /// </summary>
+    /// <param name="req">HTTP request</param>
+    /// <param name="id">Event row key</param>
+    /// <returns>204 No Content on success</returns>
+    [Function("DeleteEvent")]
+    public async Task<HttpResponseData> DeleteEvent(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "events/{id}")] HttpRequestData req,
+        string id)
+    {
+        _logger.LogInformation($"Processing DELETE request for event with ID: {id}");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Event ID is required" });
+            }
+
+            var tableClient = GetTableClient();
+
+            try
+            {
+                await tableClient.DeleteEntityAsync("events", id);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return await WriteJson(req, HttpStatusCode.NotFound, new { error = $"Event with ID '{id}' not found" });
+            }
+
+            return req.CreateResponse(HttpStatusCode.NoContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error deleting event: {ex.Message}");
+            return await WriteJson(req, HttpStatusCode.InternalServerError, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
     /// HTTP GET endpoint to retrieve all opening hours from Azure Table Storage
     /// </summary>
     /// <param name="req">HTTP request</param>
@@ -333,6 +548,198 @@ public class EventsFunctions
             response.Headers.Add("Content-Type", "application/json");
             await response.WriteStringAsync(JsonSerializer.Serialize(new { error = "Internal server error" }));
             return response;
+        }
+    }
+
+    /// <summary>
+    /// HTTP POST endpoint to create opening hours for a day
+    /// </summary>
+    /// <param name="req">HTTP request with OpeningHours JSON body</param>
+    /// <returns>JSON object representing the created opening hours</returns>
+    [Function("CreateOpeningHours")]
+    public async Task<HttpResponseData> CreateOpeningHours(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "openinghours")] HttpRequestData req)
+    {
+        _logger.LogInformation("Processing POST request to create opening hours");
+
+        try
+        {
+            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Request body is required" });
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true
+            };
+
+            OpeningHours? hours;
+            try
+            {
+                hours = JsonSerializer.Deserialize<OpeningHours>(body, jsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = $"Invalid JSON: {ex.Message}" });
+            }
+
+            if (hours == null)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Invalid opening hours payload" });
+            }
+
+            if (hours.DayOfWeek < 0 || hours.DayOfWeek > 6)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest,
+                    new { error = "dayOfWeek must be between 0 (Sunday) and 6 (Saturday)" });
+            }
+
+            hours.PartitionKey = "openinghours";
+            hours.RowKey = hours.DayOfWeek.ToString();
+
+            var tableClient = GetOpeningHoursTableClient();
+            await tableClient.CreateIfNotExistsAsync();
+
+            try
+            {
+                await tableClient.AddEntityAsync(hours.ToTableEntity());
+            }
+            catch (RequestFailedException ex) when (ex.Status == 409)
+            {
+                return await WriteJson(req, HttpStatusCode.Conflict,
+                    new { error = $"Opening hours for day '{hours.DayOfWeek}' already exist" });
+            }
+
+            return await WriteJson(req, HttpStatusCode.Created, hours);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error creating opening hours: {ex.Message}");
+            return await WriteJson(req, HttpStatusCode.InternalServerError, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// HTTP PUT endpoint to update opening hours for a specific day
+    /// </summary>
+    /// <param name="req">HTTP request with OpeningHours JSON body</param>
+    /// <param name="dayOfWeek">Day of week (0-6, where 0 is Sunday)</param>
+    /// <returns>JSON object representing the updated opening hours</returns>
+    [Function("UpdateOpeningHours")]
+    public async Task<HttpResponseData> UpdateOpeningHours(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "openinghours/{dayOfWeek}")] HttpRequestData req,
+        string dayOfWeek)
+    {
+        _logger.LogInformation($"Processing PUT request for opening hours on day: {dayOfWeek}");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dayOfWeek))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Day of week is required" });
+            }
+
+            if (!int.TryParse(dayOfWeek, out int day) || day < 0 || day > 6)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest,
+                    new { error = "dayOfWeek must be an integer between 0 (Sunday) and 6 (Saturday)" });
+            }
+
+            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Request body is required" });
+            }
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true
+            };
+
+            OpeningHours? hours;
+            try
+            {
+                hours = JsonSerializer.Deserialize<OpeningHours>(body, jsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = $"Invalid JSON: {ex.Message}" });
+            }
+
+            if (hours == null)
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Invalid opening hours payload" });
+            }
+
+            hours.DayOfWeek = day;
+            hours.PartitionKey = "openinghours";
+            hours.RowKey = dayOfWeek;
+
+            var tableClient = GetOpeningHoursTableClient();
+
+            try
+            {
+                await tableClient.GetEntityAsync<TableEntity>("openinghours", dayOfWeek);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return await WriteJson(req, HttpStatusCode.NotFound,
+                    new { error = $"Opening hours for day '{dayOfWeek}' not found" });
+            }
+
+            await tableClient.UpdateEntityAsync(hours.ToTableEntity(), ETag.All, TableUpdateMode.Replace);
+
+            return await WriteJson(req, HttpStatusCode.OK, hours);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error updating opening hours: {ex.Message}");
+            return await WriteJson(req, HttpStatusCode.InternalServerError, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// HTTP DELETE endpoint to delete opening hours for a specific day
+    /// </summary>
+    /// <param name="req">HTTP request</param>
+    /// <param name="dayOfWeek">Day of week (0-6, where 0 is Sunday)</param>
+    /// <returns>204 No Content on success</returns>
+    [Function("DeleteOpeningHours")]
+    public async Task<HttpResponseData> DeleteOpeningHours(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "openinghours/{dayOfWeek}")] HttpRequestData req,
+        string dayOfWeek)
+    {
+        _logger.LogInformation($"Processing DELETE request for opening hours on day: {dayOfWeek}");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dayOfWeek))
+            {
+                return await WriteJson(req, HttpStatusCode.BadRequest, new { error = "Day of week is required" });
+            }
+
+            var tableClient = GetOpeningHoursTableClient();
+
+            try
+            {
+                await tableClient.DeleteEntityAsync("openinghours", dayOfWeek);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return await WriteJson(req, HttpStatusCode.NotFound,
+                    new { error = $"Opening hours for day '{dayOfWeek}' not found" });
+            }
+
+            return req.CreateResponse(HttpStatusCode.NoContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error deleting opening hours: {ex.Message}");
+            return await WriteJson(req, HttpStatusCode.InternalServerError, new { error = "Internal server error" });
         }
     }
 }
