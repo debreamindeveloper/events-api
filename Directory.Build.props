@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      Redirect build output OUT of OneDrive to avoid file-lock errors during
+      build (e.g. "GenerateFunctionMetadata" task failing with "Access to the
+      path ... is denied" when OneDrive syncs obj\ mid-build).
+      Outputs land at %LOCALAPPDATA%\DotNetBuild\Events-API\{bin,obj}\.
+    -->
+    <_BuildRoot>$(LOCALAPPDATA)\DotNetBuild\Events-API\</_BuildRoot>
+    <BaseOutputPath>$(_BuildRoot)bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(_BuildRoot)obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>
