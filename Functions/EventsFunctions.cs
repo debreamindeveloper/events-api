@@ -433,7 +433,7 @@ public class EventsFunctions
             var tableClient = serviceClient.GetTableClient("openinghours");
 
             // Query all entities
-            var entities = tableClient.QueryAsync<TableEntity>(filter: $"PartitionKey eq 'opening_hours'");
+            var entities = tableClient.QueryAsync<TableEntity>(filter: $"PartitionKey eq 'openinghours'");
 
             // Convert entities to OpeningHours objects
             var openingHours = new List<OpeningHours>();
